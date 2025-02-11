@@ -104,3 +104,6 @@ def ask_chatbot(query: Query):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@app.get("/")
+def home():
+    return {"message": "Medical AI Chatbot API is running!"}
