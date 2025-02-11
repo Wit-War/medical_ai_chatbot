@@ -1,0 +1,20 @@
+User: What is blood?
+AI: **Definition:**  
+Blood is a specialized bodily fluid that plays critical roles in the human body. It is composed of plasma (the liquid component), red blood cells, white blood cells, and platelets. Blood circulates throughout the body via the cardiovascular system and is essential for various bodily functions, including transporting nutrients, oxygen, and waste products.
+
+**Components:**  
+1. **Plasma:** The liquid portion that makes up about 55% of blood. It primarily consists of water, but also contains proteins, electrolytes, hormones, and waste products.
+2. **Red Blood Cells (Erythrocytes):** These cells are responsible for carrying oxygen from the lungs to the rest of the body and returning carbon dioxide to the lungs for exhalation.
+3. **White Blood Cells (Leukocytes):** These are involved in protecting the body against infections and foreign invaders.
+4. **Platelets (Thrombocytes):** Small cell fragments that play a role in blood clotting and wound healing.
+
+**Functions:**  
+- **Transportation:** Blood transports oxygen and nutrients to tissues and organs, and carries away waste products to be filtered and expelled from the body.
+- **Regulation:** It helps regulate body temperature, pH levels, and fluid balance.
+- **Protection:** Blood contains components of the immune system that help protect the body from infections and diseases.
+
+**Sources:**  
+- Any standard medical textbook on human physiology
+- National Institutes of Health (NIH)
+- Mayo Clinic or similar reputable medical websites
+
