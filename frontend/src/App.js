@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { FaPaperPlane } from "react-icons/fa";
 
-const API_URL = "https://Wit-War.onrender.com/ask"; // Deployed backend URL
+const API_URL = "https://medical-ai-chatbot.onrender.com/ask"; // Deployed backend URL
 
 function App() {
   const [question, setQuestion] = useState("");
