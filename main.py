@@ -1,9 +1,16 @@
 import os
 import json
 import requests
-from fastapi import FastAPI, HTTPException
+import jwt
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from database import SessionLocal
+from models import User
 import openai
 from dotenv import load_dotenv
 
@@ -23,87 +30,86 @@ app.add_middleware(
     allow_headers=["*"],  
 )
 
-# Load the knowledge base
-with open("medical_knowledge.json", "r") as file:
-    knowledge_base = json.load(file)
+# Authentication Setup
+SECRET_KEY = "your-secret-key"
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# Store chat history in memory
-chat_history = {}
+# Database Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-# Request Model
-class Query(BaseModel):
-    question: str
+# User Models
+class UserSignup(BaseModel):
+    username: str
+    email: str
+    password: str
 
-def search_knowledge_base(query: str):
-    """Check if a term exists in the knowledge base and return the answer if found."""
-    query_lower = query.lower()
-    for key in knowledge_base:
-        if key in query_lower:
-            return knowledge_base[key]
-    return None
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
-def get_pubmed_citation(query: str):
-    """Fetch a relevant citation from PubMed."""
-    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={query}&retmode=json"
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        article_ids = data.get("esearchresult", {}).get("idlist", [])
-        if article_ids:
-            return f"https://pubmed.ncbi.nlm.nih.gov/{article_ids[0]}"
-    return None
+def create_access_token(data: dict, expires_delta: timedelta):
+    """Generates JWT token"""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def log_chat(user_query, ai_response):
-    """Logs user queries and AI responses."""
-    with open("logs.txt", "a") as log_file:
-        log_file.write(f"User: {user_query}\nAI: {ai_response}\n\n")
+@app.post("/signup")
+def signup(user: UserSignup, db: Session = Depends(get_db)):
+    """Registers a new user"""
+    existing_user = db.query(User).filter(User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    hashed_password = pwd_context.hash(user.password)
+    new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message": "User registered successfully"}
+
+@app.post("/login")
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    """Authenticates user and returns a JWT token"""
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if not db_user or not pwd_context.verify(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = create_access_token(data={"sub": db_user.email}, expires_delta=timedelta(hours=1))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Verify JWT token and return user email"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return email
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.post("/ask")
-def ask_chatbot(query: Query):
-    """Handles user queries, provides structured responses, remembers chat history, and logs queries."""
+def ask_chatbot(query: BaseModel, user: str = Depends(get_current_user)):
+    """Handles user queries (Requires authentication)"""
     try:
-        user_id = "default_user"  # Change this when implementing user authentication
-
-        # Initialize conversation history if not present
-        if user_id not in chat_history:
-            chat_history[user_id] = []
-
-        # Add user message to chat history
-        chat_history[user_id].append({"role": "user", "content": query.question})
-
-        # Check knowledge base first
-        knowledge_response = search_knowledge_base(query.question)
-        if knowledge_response:
-            return {"response": knowledge_response, "source": "Knowledge Base"}
-
-        # Query OpenAI with chat history
         client = openai.OpenAI()
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a medical AI assistant. Format responses into sections: Definition, Symptoms, Causes, Treatment, and Sources. Remember previous messages for follow-up questions."}
-            ] + chat_history[user_id]
+            messages=[{"role": "system", "content": "You are a medical AI assistant."},
+                      {"role": "user", "content": query.question}]
         )
-
-        # Extract response text
-        answer = response.choices[0].message.content
-        
-        # Add AI response to chat history
-        chat_history[user_id].append({"role": "assistant", "content": answer})
-
-        # Fetch PubMed citation
-        citation = get_pubmed_citation(query.question)
-        
-        # Log the conversation
-        log_chat(query.question, answer)
-
-        return {
-            "response": answer,
-            "source": "AI Model",
-            "citation": citation if citation else "No citation found"
-        }
+        return {"response": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 def home():
     return {"message": "Medical AI Chatbot API is running!"}
